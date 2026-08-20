@@ -34,14 +34,14 @@
     "name": "GLM-5.2",
     "reasoning": true,
     "thinkingLevelMap": {
-  "off": "none",
-  "minimal": null,
-  "low": null,
-  "medium": null,
-  "high": "high",
-  "xhigh": null,
-  "max": "max"
-},
+      "off": "none",
+      "minimal": null,
+      "low": null,
+      "medium": null,
+      "high": "high",
+      "xhigh": null,
+      "max": "max"
+    },
     "input": [
       "text"
     ],
@@ -64,14 +64,14 @@
     "name": "Kimi K3",
     "reasoning": true,
     "thinkingLevelMap": {
-  "off": null,
-  "minimal": null,
-  "low": "low",
-  "medium": null,
-  "high": "high",
-  "xhigh": null,
-  "max": "max"
-},
+      "off": null,
+      "minimal": null,
+      "low": "low",
+      "medium": null,
+      "high": "high",
+      "xhigh": null,
+      "max": "max"
+    },
     "input": [
       "text"
     ],

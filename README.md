@@ -26,9 +26,9 @@ _GLM-5.2, Kimi K3, and DeepSeek V4 Flash — run through the Zro inference endpo
 
 | Model | Type | Context | Max Tokens | Input Cost | Output Cost |
 |-------|------|---------|------------|------------|-------------|
-| DeepSeek V4 Flash | Text | 1.0M | 384K | — | — |
-| GLM-5.2 | Text | 524K | 64K | — | — |
-| Kimi K3 | Text | 1.0M | 131K | — | — |
+| DeepSeek V4 Flash | Text | 1.0M | 384K | $0.14 | $0.28 |
+| GLM-5.2 | Text | 524K | 64K | $1.10 | $4.00 |
+| Kimi K3 | Text + Image | 1.0M | 131K | $2.50 | $12.00 |
 *Costs are per million tokens. Billing is metered by your Zro plan and usage packs — see [zro.moonmath.ai](https://zro.moonmath.ai) for pricing.*
 
 ## Installation

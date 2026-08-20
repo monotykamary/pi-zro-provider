@@ -16,6 +16,7 @@
     }
   },
   "kimi-k3": {
+    "input": ["text", "image"],
     "maxTokens": 131072,
     "thinkingLevelMap": {
       "off": null,

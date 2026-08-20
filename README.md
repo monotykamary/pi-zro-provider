@@ -35,7 +35,13 @@ _GLM-5.2, Kimi K3, and DeepSeek V4 Flash — run through the Zro inference endpo
 
 ### Option 1: Using `pi install` (Recommended)
 
-Install directly from GitHub:
+Install from npm:
+
+```bash
+pi install npm:pi-zro-provider
+```
+
+Or directly from GitHub:
 
 ```bash
 pi install https://github.com/monotykamary/pi-zro-provider

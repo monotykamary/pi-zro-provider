@@ -612,6 +612,9 @@ function streamZro(
 	const reasoningEffort = clampedReasoning === "off" ? undefined : clampedReasoning;
 	const { reasoning: _reasoning, ...streamOptions } = (options ?? {}) as any;
 
+	// Zro stages some models (kimi-k3) at "no max_tokens => completion budget = full context" and 400s on any real prompt, so always send the model's curated cap unless the caller supplied one.
+	const maxTokens = (options as any)?.maxTokens ?? zroModel.maxTokens;
+
 	// Per-request fetch wrapper: owns its interceptor, safe under concurrency.
 	const upstreamFetch = (streamOptions as any).fetch ?? globalThis.fetch;
 	const metaFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -639,6 +642,7 @@ function streamZro(
 		fetch: metaFetch,
 		reasoningEffort,
 		apiKey,
+		maxTokens,
 	} as any);
 }
 

@@ -101,8 +101,8 @@ The available levels are model-specific and come straight from Zro's catalog:
 
 | Model | pi levels | Sent as `reasoning_effort` |
 |-------|-----------|----------------------------|
-| `glm-5.2` | `off`, `high`, `xhigh` | `none`, `high`, `max` |
-| `kimi-k3` | `low`, `high`, `xhigh` | `low`, `high`, `max` |
+| `glm-5.2` | `off`, `high`, `max` | `none`, `high`, `max` |
+| `kimi-k3` | `low`, `high`, `max` | `low`, `high`, `max` |
 | `deepseek-v4-flash-0731` | `off`, `low`, `high`, `max` | `none`, `low`, `high`, `max` |
 
 Levels map one-to-one through `thinkingLevelMap`, so `off` sends Zro's `none` token instead of silently dropping the field.

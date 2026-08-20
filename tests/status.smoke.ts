@@ -14,6 +14,7 @@ import {
 	buildSessionLine,
 	coerceStatusConfig,
 	formatCount,
+	formatDuration,
 	formatTokens,
 	formatUsd,
 	termVisWidth,
@@ -39,12 +40,16 @@ assert.equal(formatTokens(1_048_576), "1.05M");
 assert.equal(formatCount(7), "7");
 assert.equal(formatCount(1200), "1.2k");
 assert.equal(formatCount(12_000), "12k");
+assert.equal(formatDuration(0), "0s");
+assert.equal(formatDuration(45_000), "45s");
+assert.equal(formatDuration(252_000), "4m 12s");
+assert.equal(formatDuration(3_672_000), "1h 1m");
 
 // ── session line ──
-assert.equal(buildSessionLine({ requests: 0, tokens: 0, spend: 0 }), undefined);
-assert.equal(buildSessionLine({ requests: 7, tokens: 48200, spend: 0 }), "⚡ 48.2k tok · 7 req");
-assert.equal(buildSessionLine({ requests: 7, tokens: 0, spend: 0.42 }), "⚡ $0.42 · 7 req");
-assert.equal(buildSessionLine({ requests: 1, tokens: 0, spend: 0 }), "⚡ 1 req");
+assert.equal(buildSessionLine({ requests: 0, spend: 0, elapsedMs: 0 }), undefined);
+assert.equal(buildSessionLine({ requests: 7, spend: 0, elapsedMs: 0 }), "⚡ 7 req");
+assert.equal(buildSessionLine({ requests: 7, spend: 0.42, elapsedMs: 252_000 }), "⚡ $0.42 · 7 req · 4m 12s");
+assert.equal(buildSessionLine({ requests: 1, spend: 0, elapsedMs: 0 }), "⚡ 1 req");
 
 // ── account tiers ──
 const acc = (over: Partial<AccountState>): AccountState => ({ ...EMPTY_ACCOUNT, ...over });
@@ -95,7 +100,7 @@ assert.equal(truncateAnsi("abc", 5), "abc");
 assert.equal(truncateAnsi("abc", 0), "");
 
 // ── widget render ──
-const left = buildSessionLine({ requests: 7, tokens: 0, spend: 0.42 })!;
+const left = buildSessionLine({ requests: 7, spend: 0.42, elapsedMs: 0 })!;
 const widget = new StatusLineWidget(fakeTheme, left, tiers, false);
 
 // Wide: full tier, left-right justified, exactly width columns

@@ -23,9 +23,9 @@
  *     ⚡ $0.42 · 7 req           Pro ◆ $12.34 avail · $2.50 pack · 1.2k req/30d
  *     └─ session activity ──┘  └──────────────── account / quota ─────────────┘
  *
- *   The left side reports what this session has spent/sent: request count
- *   always, plus token totals and, when the response exposes one, a cost
- *   extension on each chat completion — pi requests
+ *   The left side reports what this session has done: request count, the
+ *   spend Zro reports when it attaches a cost extension, and elapsed time
+ *   (raw token totals stay in pi's own footer) — pi
  *   stream_options.include_usage, so the final SSE chunk carries usage and we
  *   read it off a teed response stream, no polling). The right side reports
  *   the plan name, total available spend, usage-pack balance, and 30-day
@@ -481,7 +481,7 @@ loadStatusConfig();
 // concurrent main/helper requests would clobber a global patch). For every
 // /chat/completions response we capture x-ratelimit-* headers and tee the
 // body: one copy goes to pi's OpenAI streaming layer, the other is scanned
-// for the final usage chunk (tokens, spend extension) that closes the stream.
+// for the final usage chunk (spend extension) that closes the stream.
 
 const sessionStats: SessionStats = { ...EMPTY_SESSION_STATS };
 const account: AccountState = { ...EMPTY_ACCOUNT };
@@ -489,8 +489,8 @@ const account: AccountState = { ...EMPTY_ACCOUNT };
 // Per-turn pending state — teed streams settle asynchronously, so capture
 // lands in pending* and is committed at turn_end.
 let pendingRequests = 0;
-let pendingTokens = 0;
 let pendingSpend = 0;
+let sessionStartedAt = 0;
 let pendingSawUsage = false;
 let pendingSawOutOfCredits = false;
 let outOfCreditsNotified = false;
@@ -524,16 +524,12 @@ function captureRateLimitHeaders(headers: Headers): void {
 	}
 }
 
-/** Extract spend/token data from a parsed completion chunk/body's usage object. */
+/** Extract spend data from a parsed completion chunk/body's usage object. */
 function captureUsage(obj: any): void {
 	const usage = obj?.usage;
 	if (typeof usage !== "object" || usage === null) return;
-	const input = usage.prompt_tokens;
-	const output = usage.completion_tokens;
-	if (typeof input === "number" && Number.isFinite(input)) pendingTokens += input;
-	if (typeof output === "number" && Number.isFinite(output)) pendingTokens += output;
 	// Metered proxies expose a cost extension (usage.total_cost / usage.cost.usd);
-	// Zro may or may not — token totals are the always-available fallback.
+	// Zro may or may not include it.
 	const total = usage.total_cost ?? usage.cost?.usd ?? usage.cost?.total;
 	if (typeof total === "number" && Number.isFinite(total)) {
 		pendingSpend += Math.max(0, total);
@@ -624,6 +620,7 @@ function streamZro(
 		if (!url.includes("/chat/completions")) return response;
 
 		pendingRequests += 1;
+		if (sessionStartedAt === 0) sessionStartedAt = Date.now();
 		captureRateLimitHeaders(response.headers);
 		if (response.status === 402) pendingSawOutOfCredits = true;
 		if (!response.ok || !response.body) return response;
@@ -758,7 +755,7 @@ function renderStatus(ctx: ExtensionContext): void {
 		return;
 	}
 
-	const hasActivity = sessionStats.requests > 0 || sessionStats.tokens > 0 || sessionStats.spend > 0;
+	const hasActivity = sessionStats.requests > 0 || sessionStats.spend > 0;
 	const sessionLine = statusConfig.session !== "off" ? buildSessionLine(sessionStats) : undefined;
 	// Show only after Zro activity this session (like pi-neuralwatt):
 	// no empty-gap line on fresh sessions, no stale account glare on other
@@ -796,12 +793,12 @@ function renderStatus(ctx: ExtensionContext): void {
 
 function resetStatusState(): void {
 	sessionStats.requests = 0;
-	sessionStats.tokens = 0;
 	sessionStats.spend = 0;
+	sessionStats.elapsedMs = 0;
 	Object.assign(account, EMPTY_ACCOUNT);
 	pendingRequests = 0;
-	pendingTokens = 0;
 	pendingSpend = 0;
+	sessionStartedAt = 0;
 	pendingSawUsage = false;
 	pendingSawOutOfCredits = false;
 	outOfCreditsNotified = false;
@@ -813,8 +810,8 @@ function resetStatusState(): void {
 function commitPending(ctx: ExtensionContext): void {
 	if (!pendingSawUsage && pendingRequests === 0) return;
 	sessionStats.requests += pendingRequests;
-	sessionStats.tokens += pendingTokens;
 	sessionStats.spend += pendingSpend;
+	if (sessionStartedAt > 0) sessionStats.elapsedMs = Date.now() - sessionStartedAt;
 
 	// Optimistic balance: deduct this turn's observed spend so the account
 	// line ticks down per turn with zero extra API calls. Every status poll
@@ -823,7 +820,6 @@ function commitPending(ctx: ExtensionContext): void {
 	applyOptimisticSpend(account, pendingSpend);
 
 	pendingRequests = 0;
-	pendingTokens = 0;
 	pendingSpend = 0;
 	pendingSawUsage = false;
 
@@ -935,7 +931,7 @@ async function configureStatusInteractive(ctx: ExtensionContext): Promise<void> 
 
 	for (;;) {
 		const lb = statusConfig.lowBalanceUsd === null ? "off" : `$${statusConfig.lowBalanceUsd}`;
-		const sessionOpt = `Session line (spend/tokens/requests): ${statusConfig.session}`;
+		const sessionOpt = `Session line (spend/requests/elapsed): ${statusConfig.session}`;
 		const accountOpt = `Account line (plan/balance/packs/activity): ${statusConfig.account}`;
 		const hideOpt = `Hide on other providers: ${statusConfig.hideOnOtherProvider ? "on" : "off"}`;
 		const lbOpt = `Low-balance warning: ${lb}`;
@@ -1094,7 +1090,7 @@ export default function (pi: ExtensionAPI) {
 	// /api/cli/status is both fresh and not redundant. Gated on session activity
 	// so sessions without Zro turns make zero API calls here.
 	pi.on("agent_settled", async (_event, ctx) => {
-		if (sessionStats.requests > 0 || sessionStats.tokens > 0 || sessionStats.spend > 0) {
+		if (sessionStats.requests > 0 || sessionStats.spend > 0) {
 			await refreshAccountStatus(cachedApiKey, statusAbort?.signal ?? undefined, false);
 			updateStatus(ctx);
 		}

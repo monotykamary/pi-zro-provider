@@ -20,7 +20,7 @@ _GLM-5.2, Kimi K3, and DeepSeek V4 Flash — run through the Zro inference endpo
 - **OpenAI-compatible API** at `https://zro.moonmath.ai/v1`
 - **Official catalog sync** from Zro's `/api/cli/models` endpoint — same one `zro models` uses
 - **Zro login reuse** — if you've run `zro login`, the extension picks up `~/.config/zro/credentials.json` automatically (no duplicated keys)
-- **Footer status widget** — session spend/tokens and account plan / available spend / usage packs / 30-day activity at a glance
+- **Footer status widget** — session spend/requests and account plan / available spend / usage packs / 30-day activity at a glance
 
 ## Available Models
 
@@ -120,8 +120,10 @@ use Zro:
 └─ session spend+requests ─┘     └─ plan · available spend · packs · activity ──┘
 ```
 
-The left side tracks what the current session has sent/spent — tokens always,
-plus a cost extension when the response exposes one (no polling). The right
+The left side tracks what this session has done — request count, the spend
+Zro attaches to a response when it reports one, and elapsed time (raw token
+totals stay in pi's own footer, which can't show
+Zro cost since its catalog carries no pricing). The right
 side shows your plan name, total available spend, usage-pack balance, and
 30-day request/token activity from Zro's `/api/cli/status` endpoint — the
 same account view `zro status` prints — plus a request-rate atom from

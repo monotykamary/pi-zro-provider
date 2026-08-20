@@ -85,11 +85,11 @@ export const EMPTY_ACCOUNT: AccountState = {
 
 export interface SessionStats {
 	requests: number;
-	tokens: number;
 	spend: number;
+	elapsedMs: number;
 }
 
-export const EMPTY_SESSION_STATS: SessionStats = { requests: 0, tokens: 0, spend: 0 };
+export const EMPTY_SESSION_STATS: SessionStats = { requests: 0, spend: 0, elapsedMs: 0 };
 
 export function applyOptimisticSpend(acc: AccountState, spendUsd: number): void {
 	if (spendUsd > 0 && acc.availableUsd !== null) {
@@ -121,6 +121,16 @@ export function formatTokens(n: number): string {
 	return `${trimZeros((n / 1_000_000).toFixed(2))}M`;
 }
 
+export function formatDuration(ms: number): string {
+	if (!Number.isFinite(ms) || ms <= 0) return "0s";
+	const s = Math.round(ms / 1000);
+	if (s < 60) return `${s}s`;
+	const m = Math.floor(s / 60);
+	if (m < 60) return s % 60 > 0 ? `${m}m ${s % 60}s` : `${m}m`;
+	const h = Math.floor(m / 60);
+	return m % 60 > 0 ? `${h}h ${m % 60}m` : `${h}h`;
+}
+
 export function formatCount(n: number): string {
 	if (!Number.isFinite(n)) return "?";
 	if (n >= 1_000_000) return `${trimZeros((n / 1_000_000).toFixed(2))}M`;
@@ -130,11 +140,12 @@ export function formatCount(n: number): string {
 
 // Line builders
 export function buildSessionLine(stats: SessionStats): string | undefined {
-	if (stats.requests <= 0 && stats.tokens <= 0 && stats.spend <= 0) return undefined;
-	const req = `${stats.requests} req`;
-	if (stats.spend > 0) return `⚡ ${formatUsd(stats.spend)} · ${req}`;
-	if (stats.tokens > 0) return `⚡ ${formatTokens(stats.tokens)} tok · ${req}`;
-	return `⚡ ${req}`;
+	if (stats.requests <= 0 && stats.spend <= 0) return undefined;
+	const atoms: string[] = [];
+	if (stats.spend > 0) atoms.push(formatUsd(stats.spend));
+	atoms.push(`${stats.requests} req`);
+	if (stats.elapsedMs > 0) atoms.push(formatDuration(stats.elapsedMs));
+	return `⚡ ${atoms.join(" · ")}`;
 }
 
 export function accountHasData(acc: AccountState): boolean {

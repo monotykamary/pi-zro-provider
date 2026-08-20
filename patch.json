@@ -8,6 +8,11 @@
       "high": "high",
       "xhigh": null,
       "max": "max"
+    },
+    "cost": {
+      "input": 0.14,
+      "output": 0.28,
+      "cacheRead": 0.0028
     }
   },
   "kimi-k3": {
@@ -20,6 +25,11 @@
       "high": "high",
       "xhigh": null,
       "max": "max"
+    },
+    "cost": {
+      "input": 2.5,
+      "output": 12,
+      "cacheRead": 0.45
     }
   },
   "glm-5.2": {
@@ -31,6 +41,11 @@
       "high": "high",
       "xhigh": null,
       "max": "max"
+    },
+    "cost": {
+      "input": 1.1,
+      "output": 4,
+      "cacheRead": 0.2
     }
   }
 }

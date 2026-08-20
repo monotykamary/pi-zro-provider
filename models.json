@@ -6,10 +6,11 @@
     "thinkingLevelMap": {
       "off": "none",
       "minimal": null,
-      "low": null,
+      "low": "low",
       "medium": null,
       "high": "high",
-      "xhigh": null
+      "xhigh": null,
+      "max": "max"
     },
     "input": [
       "text"
@@ -79,7 +80,7 @@
       "cacheWrite": 0
     },
     "contextWindow": 1048576,
-    "maxTokens": 1048576,
+    "maxTokens": 131072,
     "compat": {
       "supportsDeveloperRole": false,
       "supportsReasoningEffort": true,

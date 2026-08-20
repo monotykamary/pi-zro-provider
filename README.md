@@ -16,7 +16,7 @@ _GLM-5.2, Kimi K3, and DeepSeek V4 Flash — run through the Zro inference endpo
 ## Features
 
 - **3+ AI Models** — GLM-5.2 (default), Kimi K3, and DeepSeek V4 Flash, straight from Zro's production catalog
-- **Native reasoning effort** — every model ships its published `piLevel` → level-id map (`glm-5.2`: `off`/`high`/`max`, `kimi-k3`: `low`/`high`/`max`, `deepseek-v4-flash-0731`: `off`/`high`), so `/thinking high` etc. maps exactly to what the Zro proxy expects
+- **Native reasoning effort** — every model ships its published `piLevel` → level-id map (`glm-5.2`: `off`/`high`/`max`, `kimi-k3`: `low`/`high`/`max`, `deepseek-v4-flash-0731`: `off`/`low`/`high`/`max`), so `/thinking high` etc. maps exactly to what the Zro proxy expects
 - **OpenAI-compatible API** at `https://zro.moonmath.ai/v1`
 - **Official catalog sync** from Zro's `/api/cli/models` endpoint — same one `zro models` uses
 - **Zro login reuse** — if you've run `zro login`, the extension picks up `~/.config/zro/credentials.json` automatically (no duplicated keys)
@@ -28,7 +28,7 @@ _GLM-5.2, Kimi K3, and DeepSeek V4 Flash — run through the Zro inference endpo
 |-------|------|---------|------------|------------|-------------|
 | DeepSeek V4 Flash | Text | 1.0M | 384K | — | — |
 | GLM-5.2 | Text | 524K | 64K | — | — |
-| Kimi K3 | Text | 1.0M | 1.0M | — | — |
+| Kimi K3 | Text | 1.0M | 131K | — | — |
 *Costs are per million tokens. Billing is metered by your Zro plan and usage packs — see [zro.moonmath.ai](https://zro.moonmath.ai) for pricing.*
 
 ## Installation
@@ -103,7 +103,7 @@ The available levels are model-specific and come straight from Zro's catalog:
 |-------|-----------|----------------------------|
 | `glm-5.2` | `off`, `high`, `xhigh` | `none`, `high`, `max` |
 | `kimi-k3` | `low`, `high`, `xhigh` | `low`, `high`, `max` |
-| `deepseek-v4-flash-0731` | `off`, `high` | `none`, `high` |
+| `deepseek-v4-flash-0731` | `off`, `low`, `high`, `max` | `none`, `low`, `high`, `max` |
 
 Levels map one-to-one through `thinkingLevelMap`, so `off` sends Zro's `none` token instead of silently dropping the field.
 

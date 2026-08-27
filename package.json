@@ -2,7 +2,7 @@
   "name": "pi-zro-provider",
   "version": "1.2.2",
   "packageManager": "pnpm@11.20.0",
-  "description": "Zro provider extension for pi - GLM-5.2, Kimi K3 & DeepSeek V4 Flash through the Zro inference endpoint",
+  "description": "Zro provider extension for pi - GLM-5.2, GLM-5.3 Flash, Kimi K3 & DeepSeek V4 Flash through the Zro inference endpoint",
   "type": "module",
   "main": "index.ts",
   "scripts": {
@@ -22,6 +22,7 @@
     "kimi",
     "deepseek",
     "glm-5.2",
+    "glm-5.3-flash",
     "ai",
     "llm"
   ],

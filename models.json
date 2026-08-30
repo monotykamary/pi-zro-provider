@@ -65,11 +65,12 @@
     "reasoning": true,
     "thinkingLevelMap": {
       "off": "none",
-      "minimal": null,
-      "low": null,
-      "medium": null,
+      "minimal": "minimal",
+      "low": "minimal",
+      "medium": "medium",
       "high": "high",
-      "xhigh": "max"
+      "xhigh": "max",
+      "max": "max"
     },
     "input": [
       "text"

@@ -54,12 +54,13 @@
   },
   "glm-5.3": {
     "thinkingLevelMap": {
-      "off": null,
-      "minimal": "low",
-      "low": "low",
-      "medium": "high",
+      "off": "none",
+      "minimal": "minimal",
+      "low": "minimal",
+      "medium": "medium",
       "high": "high",
-      "xhigh": "max"
+      "xhigh": "max",
+      "max": "max"
     },
     "cost": {
       "input": 1.4,

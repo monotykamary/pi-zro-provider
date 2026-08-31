@@ -16,7 +16,7 @@ _GLM-5.2, Kimi K3, and DeepSeek V4 Flash — run through the Zro inference endpo
 ## Features
 
 - **5+ AI Models** — GLM-5.2 (default), Kimi K3, and DeepSeek V4 Flash, straight from Zro's production catalog
-- **Native reasoning effort** — every model ships an endpoint-verified `piLevel` → level-id map (`glm-5.2`, `glm-5.3-flash`, `deepseek-v4-flash-0731`: full `off`–`max` ladder; `kimi-k3`: `low`/`high`/`max` — the proxy rejects `medium` there), so `/thinking low` etc. maps exactly to what the Zro proxy accepts. Quirk: `glm-5.3-flash` silently disables thinking at `low`, so `minimal`/`low` map to `minimal`
+- **Native reasoning effort** — every model ships an endpoint-verified `piLevel` → level-id map (`glm-5.2`, `glm-5.3-flash`, `deepseek-v4-flash-0731`: full `off`–`max` ladder; `kimi-k3`: `low`/`high`/`max` — the proxy rejects `medium` there), so `/thinking low` etc. maps exactly to what the Zro proxy accepts. Quirks: `glm-5.3-flash` silently disables thinking at `low`, so `minimal`/`low` map to `minimal`; `glm-5.3` can't disable thinking at all (Z.ai removed `none` for 5.3 — the proxy accepts it but leaks chain-of-thought into `content`), so `off` is unavailable and `minimal`/`medium` map to the officially supported `low`/`high`
 - **OpenAI-compatible API** at `https://zro.moonmath.ai/v1`
 - **Official catalog sync** from Zro's `/api/cli/models` endpoint — same one `zro models` uses
 - **Zro login reuse** — if you've run `zro login`, the extension picks up `~/.config/zro/credentials.json` automatically (no duplicated keys)
@@ -28,7 +28,7 @@ _GLM-5.2, Kimi K3, and DeepSeek V4 Flash — run through the Zro inference endpo
 |-------|------|---------|------------|------------|-------------|
 | DeepSeek V4 Flash | Text | 1.0M | 384K | $0.14 | $0.28 |
 | GLM-5.2 | Text | 524K | 64K | $1.10 | $4.00 |
-| GLM-5.3 | Text | 1.0M | 131K | — | — |
+| GLM-5.3 | Text | 1.0M | 131K | $1.40 | $4.40 |
 | GLM-5.3 Flash | Text + Image | 1.0M | 64K | $0.15 | $0.50 |
 | Kimi K3 | Text + Image | 1.0M | 131K | $2.50 | $12.00 |
 *Costs are per million tokens. Billing is metered by your Zro plan and usage packs — see [zro.moonmath.ai](https://zro.moonmath.ai) for pricing.*
@@ -104,6 +104,7 @@ The available levels are model-specific and come straight from Zro's catalog:
 | Model | pi levels | Sent as `reasoning_effort` |
 |-------|-----------|----------------------------|
 | `glm-5.2` | `off`, `high`, `max` | `none`, `high`, `max` |
+| `glm-5.3` | `minimal`, `low`, `medium`, `high`, `xhigh` | `low`, `low`, `high`, `high`, `max` |
 | `kimi-k3` | `low`, `high`, `max` | `low`, `high`, `max` |
 | `deepseek-v4-flash-0731` | `off`, `low`, `high`, `max` | `none`, `low`, `high`, `max` |
 

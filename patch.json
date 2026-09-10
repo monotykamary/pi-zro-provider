@@ -15,6 +15,26 @@
       "cacheRead": 0.0028
     }
   },
+  "deepseek-v4.1-flash": {
+    "input": [
+      "text",
+      "image"
+    ],
+    "thinkingLevelMap": {
+      "off": null,
+      "minimal": null,
+      "low": "low",
+      "medium": null,
+      "high": "high",
+      "xhigh": "max",
+      "max": "max"
+    },
+    "cost": {
+      "input": 0.14,
+      "output": 0.28,
+      "cacheRead": 0.0028
+    }
+  },
   "kimi-k3": {
     "input": [
       "text",

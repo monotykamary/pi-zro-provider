@@ -117,36 +117,6 @@
     }
   },
   {
-    "id": "glm-5.2",
-    "name": "GLM-5.2",
-    "reasoning": true,
-    "thinkingLevelMap": {
-      "off": "none",
-      "minimal": null,
-      "low": null,
-      "medium": null,
-      "high": "high",
-      "xhigh": null,
-      "max": "max"
-    },
-    "input": [
-      "text"
-    ],
-    "cost": {
-      "input": 0,
-      "output": 0,
-      "cacheRead": 0,
-      "cacheWrite": 0
-    },
-    "contextWindow": 524288,
-    "maxTokens": 64000,
-    "compat": {
-      "supportsDeveloperRole": false,
-      "supportsReasoningEffort": true,
-      "maxTokensField": "max_tokens"
-    }
-  },
-  {
     "id": "glm-5.3",
     "name": "GLM-5.3",
     "reasoning": true,

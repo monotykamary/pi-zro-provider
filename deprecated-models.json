@@ -29,5 +29,35 @@
       "maxTokensField": "max_tokens"
     },
     "deprecatedAt": "2026-09-12T02:00:31.341Z"
+  },
+  "dolly1": {
+    "id": "dolly1",
+    "name": "Dolly 1",
+    "reasoning": true,
+    "thinkingLevelMap": {
+      "off": "none",
+      "minimal": null,
+      "low": null,
+      "medium": null,
+      "high": "high",
+      "xhigh": "max"
+    },
+    "input": [
+      "text"
+    ],
+    "cost": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0
+    },
+    "contextWindow": 1048576,
+    "maxTokens": 64000,
+    "compat": {
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": true,
+      "maxTokensField": "max_tokens"
+    },
+    "deprecatedAt": "2026-09-15T02:00:30.252Z"
   }
 }

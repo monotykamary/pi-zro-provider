@@ -88,8 +88,8 @@
     }
   },
   {
-    "id": "dolly1",
-    "name": "Dolly 1",
+    "id": "dolly1-security",
+    "name": "Dolly 1 Security",
     "reasoning": true,
     "thinkingLevelMap": {
       "off": "none",

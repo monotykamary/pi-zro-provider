@@ -15,7 +15,7 @@ _GLM-5.2, Kimi K3, and DeepSeek V4 / V4.1 Flash — run through the Zro inferenc
 
 ## Features
 
-- **8+ AI Models** — GLM-5.2 (default), Kimi K3, DeepSeek V4 Flash, and DeepSeek V4.1 Flash, straight from Zro's production catalog
+- **9+ AI Models** — GLM-5.2 (default), Kimi K3, DeepSeek V4 Flash, and DeepSeek V4.1 Flash, straight from Zro's production catalog
 - **Native reasoning effort** — every model ships an endpoint-verified `piLevel` → level-id map (`glm-5.2`, `glm-5.3-flash`, `deepseek-v4-flash-0731`: full `off`–`max` ladder; `deepseek-v4.1-flash`: `low`/`high`/`max` — catalog has no `none`, and `xhigh`/`max` both send `max`; `kimi-k3`: `low`/`high`/`max` — the proxy rejects `medium` there), so `/thinking low` etc. maps exactly to what the Zro proxy accepts. Quirks: `glm-5.3-flash` silently disables thinking at `low`, so `minimal`/`low` map to `minimal`; `glm-5.3` mirrors flash's full ladder — Z.ai officially removed `none` for the 5.3 family, but the proxy accepts it and streams cleanly (occasionally a short chain-of-thought preamble surfaces in `content` before the answer), and `xhigh`/`max` both send `max`
 - **OpenAI-compatible API** at `https://zro.moonmath.ai/v1`
 - **Official catalog sync** from Zro's `/api/cli/models` endpoint — same one `zro models` uses
@@ -30,6 +30,7 @@ _GLM-5.2, Kimi K3, and DeepSeek V4 / V4.1 Flash — run through the Zro inferenc
 | DeepSeek V4 Flash | Text | 1.0M | 384K | $0.14 | $0.28 |
 | DeepSeek V4.1 Flash | Text + Image | 1.0M | 384K | $0.14 | $0.28 |
 | Dolly 1 | Text | 1.0M | 64K | — | — |
+| Dolly 1 Security | Text | 1.0M | 64K | — | — |
 | GLM-5.2 | Text | 524K | 64K | $1.10 | $4.00 |
 | GLM-5.3 | Text | 1.0M | 131K | $1.40 | $4.40 |
 | GLM-5.3 Flash | Text + Image | 1.0M | 64K | $0.15 | $0.50 |

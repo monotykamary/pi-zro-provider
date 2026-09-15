@@ -6,9 +6,11 @@
  */
 import assert from "node:assert/strict";
 import {
+	ASCII_GLYPHS,
 	EMPTY_ACCOUNT,
 	StatusLineWidget,
 	accountHasData,
+	detectLegacyTerminal,
 	applyOptimisticSpend,
 	buildAccountTiers,
 	buildSessionLine,
@@ -17,6 +19,9 @@ import {
 	formatDuration,
 	formatTokens,
 	formatUsd,
+	resolveGlyphSet,
+	resolveWidgetGlyphSet,
+	UNICODE_GLYPHS,
 	termVisWidth,
 	truncateAnsi,
 	type AccountState,
@@ -103,36 +108,38 @@ assert.equal(truncateAnsi("abc", 0), "");
 const left = buildSessionLine({ requests: 7, spend: 0.42, elapsedMs: 0 })!;
 const widget = new StatusLineWidget(fakeTheme, left, tiers, false);
 
-// Wide: full tier, left-right justified, exactly width columns
+// Wide: full tier, left-right justified at width − 1 (the widget never
+// paints the terminal's last column — legacy terminals treat that cell as a
+// pending wrap).
 const wide = widget.render(80);
 assert.equal(wide.length, 1);
-assert.equal(termVisWidth(wide[0]), 80);
-assert.ok(stripAnsi(wide[0]).startsWith("⚡ $0.42"));
+assert.equal(termVisWidth(wide[0]), 79);
+assert.ok(stripAnsi(wide[0]).startsWith("\u26A1 $0.42"));
 assert.ok(stripAnsi(wide[0]).endsWith("996/1k"));
 
-// Medium: drops to a compressed tier, still exactly width
+// Medium: drops to a compressed tier, still exactly width − 1
 const med = widget.render(52);
-assert.equal(termVisWidth(med[0]), 52);
+assert.equal(termVisWidth(med[0]), 51);
 assert.ok(!stripAnsi(med[0]).includes("tok/30d"), "compressed tiers drop tokens activity first");
 
 // Narrow: no tier fits → left only, padded
 const narrow = widget.render(termVisWidth(left) + 3);
-assert.equal(termVisWidth(narrow[0]), termVisWidth(left) + 3);
-assert.ok(stripAnsi(narrow[0]).startsWith("⚡"));
+assert.equal(termVisWidth(narrow[0]), termVisWidth(left) + 2);
+assert.ok(stripAnsi(narrow[0]).startsWith("\u26A1"));
 assert.ok(!stripAnsi(narrow[0]).includes("◆"));
 
 // Narrower than left itself: truncation never overflows (crash guard)
 const tiny = widget.render(10);
-assert.equal(termVisWidth(tiny[0]), 10);
+assert.equal(termVisWidth(tiny[0]), 9);
 
 // Left empty (session gated) → right-aligned account line
 const rightOnly = new StatusLineWidget(fakeTheme, "", tiers, false);
 const ro = rightOnly.render(70);
-assert.equal(termVisWidth(ro[0]), 70);
+assert.equal(termVisWidth(ro[0]), 69);
 assert.ok(stripAnsi(ro[0]).endsWith("996/1k"));
 
 // No data at all
-assert.deepEqual(new StatusLineWidget(fakeTheme, "", [], false).render(40), [fakeTheme.fg("dim", "") + " ".repeat(40)]);
+assert.deepEqual(new StatusLineWidget(fakeTheme, "", [], false).render(40), [fakeTheme.fg("dim", "") + " ".repeat(39)]);
 
 // Warning color wired through
 const warn = new StatusLineWidget(fakeTheme, "", buildAccountTiers(acc({ availableUsd: 5 }), true), true);
@@ -149,21 +156,59 @@ assert.deepEqual(coerceStatusConfig(undefined), {
 	account: "widget",
 	hideOnOtherProvider: true,
 	lowBalanceUsd: 10,
+	glyphs: "auto",
 });
 assert.deepEqual(coerceStatusConfig({ session: "bogus", lowBalanceUsd: -3 }), {
 	session: "widget",
 	account: "widget",
 	hideOnOtherProvider: true,
 	lowBalanceUsd: 10,
+	glyphs: "auto",
 });
 assert.deepEqual(coerceStatusConfig({ session: "statusbar", account: "off", hideOnOtherProvider: false, lowBalanceUsd: null }), {
 	session: "statusbar",
 	account: "off",
 	hideOnOtherProvider: false,
 	lowBalanceUsd: null,
+	glyphs: "auto",
 });
 assert.equal(coerceStatusConfig({ lowBalanceUsd: 42 }).lowBalanceUsd, 42);
 assert.equal(coerceStatusConfig({ lowBalanceUsd: false }).lowBalanceUsd, null);
 assert.deepEqual(coerceStatusConfig(null).session, "widget");
 
+// ── legacy-terminal glyph policy ──
+const mintty = { TERM_PROGRAM: "mintty", TERM: "xterm" } as NodeJS.ProcessEnv;
+const cygwin = { TERM: "cygwin" } as NodeJS.ProcessEnv;
+const wt = { TERM_PROGRAM: "Windows_Terminal", TERM: "xterm-256color" } as NodeJS.ProcessEnv;
+assert.equal(detectLegacyTerminal(mintty), true);
+assert.equal(detectLegacyTerminal(cygwin), true);
+assert.equal(detectLegacyTerminal(wt), false);
+assert.equal(detectLegacyTerminal({} as NodeJS.ProcessEnv), false);
+
+assert.equal(resolveGlyphSet("auto", wt), UNICODE_GLYPHS);
+assert.equal(resolveGlyphSet("auto", mintty), ASCII_GLYPHS);
+assert.equal(resolveGlyphSet("unicode", mintty), UNICODE_GLYPHS);
+assert.equal(resolveGlyphSet("ascii", wt), ASCII_GLYPHS);
+// An explicit unicode choice is clamped for widget content on legacy terminals
+assert.equal(resolveWidgetGlyphSet("unicode", mintty), ASCII_GLYPHS);
+assert.equal(resolveWidgetGlyphSet("unicode", wt), UNICODE_GLYPHS);
+assert.equal(resolveWidgetGlyphSet("auto", mintty), ASCII_GLYPHS);
+assert.equal(resolveWidgetGlyphSet("ascii", wt), ASCII_GLYPHS);
+
+// ASCII mode emits no non-ASCII codepoints at all
+const asciiLine = buildSessionLine({ requests: 7, spend: 0.42, elapsedMs: 252_000 }, ASCII_GLYPHS)!;
+assert.equal(asciiLine, "* $0.42 - 7 req - 4m 12s");
+const asciiTiers = buildAccountTiers(acc({ availableUsd: 5, activity30dRequests: 1200 }), true, ASCII_GLYPHS);
+assert.ok(asciiTiers[0].startsWith("! + $5 avail"), `got ${asciiTiers[0]}`);
+const asciiWidget = new StatusLineWidget(fakeTheme, asciiLine, asciiTiers, true, ASCII_GLYPHS).render(60)[0];
+assert.equal([...stripAnsi(asciiWidget)].every((c) => c.charCodeAt(0) < 128), true);
+
+// Unicode mode keeps the glyphs (regression guard for the default path)
+assert.ok(buildAccountTiers(acc({ availableUsd: 5 }), true)[0].includes("⚠ ◆"));
+
+// Truncation takes the caller's ellipsis so ASCII mode stays ASCII
+assert.equal(truncateAnsi("abcdefghij", 5, "..."), "abcd...");
+assert.ok(truncateAnsi("abcdefghij", 5).endsWith("…"));
+assert.equal(coerceStatusConfig({ glyphs: "bogus" }).glyphs, "auto");
+assert.equal(coerceStatusConfig({ glyphs: "ascii" }).glyphs, "ascii");
 console.log("status.smoke: all assertions passed");

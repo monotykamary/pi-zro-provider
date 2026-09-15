@@ -149,6 +149,7 @@ Edit `~/.pi/agent/extensions/zro.json` or run `/zro-status`:
 | `account` | `widget` \| `statusbar` \| `off` | `widget` |
 | `hideOnOtherProvider` | `true` \| `false` | `true` |
 | `lowBalanceUsd` | number \| `null` | `10` |
+| `glyphs` | `auto` \| `unicode` \| `ascii` | `auto` |
 
 Non-interactive toggles:
 
@@ -157,9 +158,18 @@ Non-interactive toggles:
 /zro-status account widget|statusbar|off
 /zro-status hide true|false
 /zro-status lowBalance 25|off
+/zro-status glyphs auto|unicode|ascii
 /zro-status refresh
 /zro-status reset
 ```
+
+`glyphs: "auto"` swaps the emoji footer glyphs (bolt, gem, warn, separator) for ASCII equivalents on
+legacy terminals (mintty/Cygwin), whose cell-width tables can disagree with the
+extension's width math. On those terminals a full-width widget line can wrap
+physically, which desynchronizes pi's renderer and leaves stale rows behind.
+The widget also never paints the terminal's last column, and clamps an explicit
+`unicode` choice to ASCII on legacy terminals; the statusbar is not edge-padded
+and always honors the exact choice.
 
 
 ## Authentication

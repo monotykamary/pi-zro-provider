@@ -53,7 +53,8 @@
  *     "session": "widget",            // "widget" | "statusbar" | "off"
  *     "account": "widget",            // "widget" | "statusbar" | "off"
  *     "hideOnOtherProvider": true,    // hide when a non-Zro model is active
- *     "lowBalanceUsd": 10             // warn threshold, null/false disables
+ *     "lowBalanceUsd": 10,            // warn threshold, null/false disables
+ *     "glyphs": "auto"                // "auto" | "unicode" | "ascii"
  *   }
  *
  *   - "widget" (default): rendered in the below-editor status line
@@ -65,6 +66,14 @@
  *     /zro-status account widget|statusbar|off
  *     /zro-status hide true|false
  *     /zro-status lowBalance <usd>|off
+ *     /zro-status glyphs auto|unicode|ascii
+ *
+ *   - glyphs "auto" swaps the emoji footer glyphs (bolt, gem, warn) for
+ *     terminals (mintty/Cygwin), whose cell-width tables disagree with the
+ *     width math and wrap the full-width widget line. "unicode"/"ascii"
+ *     force a set. The widget never paints the terminal's last column, and
+ *     clamps an explicit "unicode" to ASCII on legacy terminals; the
+ *     statusbar is not edge-padded and honors the explicit choice.
  *     /zro-status refresh          (re-fetch account status now)
  *     /zro-status reset
  *
@@ -105,8 +114,11 @@ import {
 	EMPTY_SESSION_STATS,
 	StatusLineWidget,
 	accountHasData,
+	resolveGlyphSet,
+	resolveWidgetGlyphSet,
 	type AccountState,
 	type SessionStats,
+	type GlyphSet,
 	type StatusConfig,
 } from "./status";
 import fs from "fs";
@@ -467,6 +479,7 @@ function writeStatusConfig(): void {
 		raw.account = statusConfig.account;
 		raw.hideOnOtherProvider = statusConfig.hideOnOtherProvider;
 		raw.lowBalanceUsd = statusConfig.lowBalanceUsd;
+		raw.glyphs = statusConfig.glyphs;
 		fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
 		fs.writeFileSync(CONFIG_PATH, JSON.stringify(raw, null, 2) + "\n");
 	} catch {
@@ -494,6 +507,7 @@ let sessionStartedAt = 0;
 let pendingSawUsage = false;
 let pendingSawOutOfCredits = false;
 let outOfCreditsNotified = false;
+let widgetGlyphClampNotified = false;
 
 const teeReaders = new Set<Promise<void>>();
 
@@ -760,21 +774,32 @@ function renderStatus(ctx: ExtensionContext): void {
 	}
 
 	const hasActivity = sessionStats.requests > 0 || sessionStats.spend > 0;
-	const sessionLine = statusConfig.session !== "off" ? buildSessionLine(sessionStats) : undefined;
+	// Legacy terminals measure ⚡ ◆ ⚠ with their own cell tables; the widget
+	// clamps to ASCII there, the statusbar keeps the user's explicit choice.
+	const glyphs = resolveGlyphSet(statusConfig.glyphs);
+	const widgetGlyphs = resolveWidgetGlyphSet(statusConfig.glyphs);
+	const widgetClamped = widgetGlyphs !== glyphs;
+	if (widgetClamped && !widgetGlyphClampNotified && ctx.hasUI) {
+		widgetGlyphClampNotified = true;
+		ctx.ui.notify("Zro: widget glyphs stay ASCII on this terminal — unicode ⚡ ◆ ⚠ overflow legacy mintty/Cygwin cell widths. Statusbar is unaffected.", "info");
+	}
 	// Show only after Zro activity this session (like pi-neuralwatt):
 	// no empty-gap line on fresh sessions, no stale account glare on other
 	// providers' sessions.
 	const accountVisible = statusConfig.account !== "off" && accountHasData(account) && hasActivity;
 	const lowBalance =
 		statusConfig.lowBalanceUsd !== null && account.availableUsd !== null && account.availableUsd <= statusConfig.lowBalanceUsd;
-	const accTiers = accountVisible ? buildAccountTiers(account, lowBalance) : [];
+	const sessionLine = statusConfig.session !== "off" ? buildSessionLine(sessionStats, glyphs) : undefined;
+	const accTiers = accountVisible ? buildAccountTiers(account, lowBalance, glyphs) : [];
+	const sessionLineW = widgetClamped && statusConfig.session !== "off" ? buildSessionLine(sessionStats, widgetGlyphs) : sessionLine;
+	const accTiersW = widgetClamped && accountVisible ? buildAccountTiers(account, lowBalance, widgetGlyphs) : accTiers;
 
 	// Status bar (built-in footer slots)
 	const sBar = statusConfig.session === "statusbar" ? sessionLine : undefined;
 	const aBar = statusConfig.account === "statusbar" && accountVisible ? accTiers[0] : undefined;
 	if (sBar && aBar) {
 		// Combined to avoid eating two footer slots
-		ctx.ui.setStatus(STATUS_KEY_SESSION, ctx.ui.theme.fg(lowBalance ? "warning" : "dim", `${sBar} · ${aBar}`));
+		ctx.ui.setStatus(STATUS_KEY_SESSION, ctx.ui.theme.fg(lowBalance ? "warning" : "dim", `${sBar} ${glyphs.sep} ${aBar}`));
 		ctx.ui.setStatus(STATUS_KEY_ACCOUNT, undefined);
 	} else {
 		ctx.ui.setStatus(STATUS_KEY_SESSION, sBar ? ctx.ui.theme.fg("dim", sBar) : undefined);
@@ -782,17 +807,17 @@ function renderStatus(ctx: ExtensionContext): void {
 	}
 
 	// Below-editor widget (two-zone, width-aware)
-	const leftW = statusConfig.session === "widget" ? sessionLine : undefined;
-	const rightW = statusConfig.account === "widget" && accountVisible ? accTiers : undefined;
+	const leftW = statusConfig.session === "widget" ? sessionLineW : undefined;
+	const rightW = statusConfig.account === "widget" && accountVisible ? accTiersW : undefined;
 	if (leftW !== undefined || (rightW !== undefined && rightW.length > 0)) {
 		ctx.ui.setWidget(
 			WIDGET_KEY,
-			(_tui: any, theme: any) => new StatusLineWidget(theme, leftW ?? "", rightW ?? [], lowBalance),
+			(_tui: any, theme: any) => new StatusLineWidget(theme, leftW ?? "", rightW ?? [], lowBalance, widgetGlyphs),
 			{ placement: "belowEditor" },
 		);
-	} else {
+} else {
 		ctx.ui.setWidget(WIDGET_KEY, undefined);
-	}
+}
 }
 
 function resetStatusState(): void {
@@ -842,11 +867,11 @@ function commitPending(ctx: ExtensionContext): void {
 
 function statusSummary(): string {
 	const lb = statusConfig.lowBalanceUsd === null ? "off" : `${statusConfig.lowBalanceUsd}`;
-	return `session=${statusConfig.session}, account=${statusConfig.account}, hideOnOtherProvider=${statusConfig.hideOnOtherProvider}, lowBalanceUsd=${lb}`;
+	return `session=${statusConfig.session}, account=${statusConfig.account}, hideOnOtherProvider=${statusConfig.hideOnOtherProvider}, lowBalanceUsd=${lb}, glyphs=${statusConfig.glyphs}`;
 }
 
 const STATUS_USAGE =
-	"Usage: /zro-status [session|account widget|statusbar|off · hide true|false · lowBalance <usd>|off · refresh · reset]";
+	"Usage: /zro-status [session|account widget|statusbar|off · hide true|false · lowBalance <usd>|off · glyphs auto|unicode|ascii · refresh · reset]";
 
 async function handleStatusCommand(args: string, ctx: ExtensionContext): Promise<void> {
 	const tokens = args.trim().split(/\s+/).filter(Boolean);
@@ -926,12 +951,26 @@ async function handleStatusCommand(args: string, ctx: ExtensionContext): Promise
 		return;
 	}
 
+	if (key === "glyphs" && tokens.length === 2) {
+		if (value !== "auto" && value !== "unicode" && value !== "ascii") {
+			ctx.ui.notify(STATUS_USAGE, "error");
+			return;
+		}
+		statusConfig.glyphs = value;
+		writeStatusConfig();
+		updateStatus(ctx);
+		ctx.ui.notify(`Zro status. ${statusSummary()}`, "info");
+		return;
+	}
+
 	ctx.ui.notify(STATUS_USAGE, "error");
 }
 
 async function configureStatusInteractive(ctx: ExtensionContext): Promise<void> {
 	const modes = ["widget", "statusbar", "off"] as const;
 	const nextMode = (m: string) => modes[(modes.indexOf(m as any) + 1) % modes.length];
+	const glyphModes = ["auto", "unicode", "ascii"] as const;
+	const nextGlyphMode = () => glyphModes[(glyphModes.indexOf(statusConfig.glyphs as any) + 1) % glyphModes.length];
 
 	for (;;) {
 		const lb = statusConfig.lowBalanceUsd === null ? "off" : `$${statusConfig.lowBalanceUsd}`;
@@ -939,6 +978,7 @@ async function configureStatusInteractive(ctx: ExtensionContext): Promise<void> 
 		const accountOpt = `Account line (plan/balance/packs/activity): ${statusConfig.account}`;
 		const hideOpt = `Hide on other providers: ${statusConfig.hideOnOtherProvider ? "on" : "off"}`;
 		const lbOpt = `Low-balance warning: ${lb}`;
+		const glyphOpt = `Glyphs (legacy terminals): ${statusConfig.glyphs}`;
 		const refreshOpt = "Refresh account status now";
 		const doneOpt = "Done";
 
@@ -947,6 +987,7 @@ async function configureStatusInteractive(ctx: ExtensionContext): Promise<void> 
 			accountOpt,
 			hideOpt,
 			lbOpt,
+			glyphOpt,
 			refreshOpt,
 			doneOpt,
 		]);
@@ -984,6 +1025,12 @@ async function configureStatusInteractive(ctx: ExtensionContext): Promise<void> 
 				writeStatusConfig();
 				updateStatus(ctx);
 			}
+			continue;
+		}
+		if (choice === glyphOpt) {
+			statusConfig.glyphs = nextGlyphMode();
+			writeStatusConfig();
+			updateStatus(ctx);
 			continue;
 		}
 		if (choice === refreshOpt) {

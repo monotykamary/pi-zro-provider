@@ -15,15 +15,68 @@
  * that fits the remaining width, and as a last resort truncates the minimal
  * tier. Width math counts only terminal-visible columns (ANSI-aware, wide
  * glyphs like ⚡ ⚠ measure 2 columns).
+ *
+ * Terminal safety (legacy terminals, mintty/Cygwin):
+ *   - Glyphs degrade to ASCII when auto-detection matches a legacy terminal
+ *     or when the glyphs config asks for it (see GlyphMode). Older mintty
+ *     builds measure ⚡ ◆ ⚠ with cell tables that disagree with the ones
+ *     above; the statusbar absorbs that (its lines are not edge-padded) but
+ *     the full-width widget line wraps, which desyncs pi's row bookkeeping.
+ *   - render() budgets width − 1, so the widget never paints the terminal's
+ *     last column (the classic pending-wrap hazard).
  */
 
 export type DisplayMode = "widget" | "statusbar" | "off";
+
+export type GlyphMode = "auto" | "unicode" | "ascii";
+
+export interface GlyphSet {
+	bolt: string;
+	gem: string;
+	warn: string;
+	sep: string;
+	ellipsis: string;
+}
+
+export const UNICODE_GLYPHS: GlyphSet = { bolt: "⚡", gem: "◆", warn: "⚠", sep: "·", ellipsis: "…" };
+export const ASCII_GLYPHS: GlyphSet = { bolt: "*", gem: "+", warn: "!", sep: "-", ellipsis: "..." };
+
+/** True for terminals whose cell-width tables are known to disagree with the
+ * width math below (older mintty/Cygwin builds). */
+export function detectLegacyTerminal(env: NodeJS.ProcessEnv = process.env): boolean {
+	const termProgram = env.TERM_PROGRAM ?? "";
+	const term = env.TERM ?? "";
+	return (
+		termProgram === "mintty" ||
+		termProgram === "cygwin" ||
+		termProgram === "msys" ||
+		term.startsWith("cygwin") ||
+		term.startsWith("msys")
+	);
+}
+
+export function resolveGlyphSet(mode: GlyphMode, env: NodeJS.ProcessEnv = process.env): GlyphSet {
+	if (mode === "unicode") return UNICODE_GLYPHS;
+	if (mode === "ascii") return ASCII_GLYPHS;
+	return detectLegacyTerminal(env) ? ASCII_GLYPHS : UNICODE_GLYPHS;
+}
+
+/** Widget content is edge-padded to the terminal width, so a glyph the
+ * terminal measures wider than termVisWidth() does wraps the line and
+ * corrupts pi's differential renderer. An explicit "unicode" choice is
+ * therefore clamped to ASCII for widget content on legacy terminals;
+ * statusbar content is not edge-padded and keeps the caller's choice. */
+export function resolveWidgetGlyphSet(mode: GlyphMode, env: NodeJS.ProcessEnv = process.env): GlyphSet {
+	if (mode === "unicode" && detectLegacyTerminal(env)) return ASCII_GLYPHS;
+	return resolveGlyphSet(mode, env);
+}
 
 export interface StatusConfig {
 	session: DisplayMode;
 	account: DisplayMode;
 	hideOnOtherProvider: boolean;
 	lowBalanceUsd: number | null;
+	glyphs: GlyphMode;
 }
 
 export const DEFAULT_STATUS_CONFIG: StatusConfig = {
@@ -31,12 +84,18 @@ export const DEFAULT_STATUS_CONFIG: StatusConfig = {
 	account: "widget",
 	hideOnOtherProvider: true,
 	lowBalanceUsd: 10,
+	glyphs: "auto",
 };
 
 const VALID_MODES = new Set<string>(["widget", "statusbar", "off"]);
+const VALID_GLYPH_MODES = new Set<string>(["auto", "unicode", "ascii"]);
 
 function coerceMode(value: unknown, fallback: DisplayMode): DisplayMode {
 	return typeof value === "string" && VALID_MODES.has(value) ? (value as DisplayMode) : fallback;
+}
+
+function coerceGlyphMode(value: unknown, fallback: GlyphMode): GlyphMode {
+	return typeof value === "string" && VALID_GLYPH_MODES.has(value) ? (value as GlyphMode) : fallback;
 }
 
 export function coerceStatusConfig(raw: unknown): StatusConfig {
@@ -53,6 +112,7 @@ export function coerceStatusConfig(raw: unknown): StatusConfig {
 				: r.lowBalanceUsd === null || r.lowBalanceUsd === false
 					? null
 					: d.lowBalanceUsd,
+		glyphs: coerceGlyphMode(r.glyphs, d.glyphs),
 	};
 }
 
@@ -139,13 +199,13 @@ export function formatCount(n: number): string {
 }
 
 // Line builders
-export function buildSessionLine(stats: SessionStats): string | undefined {
+export function buildSessionLine(stats: SessionStats, glyphs: GlyphSet = UNICODE_GLYPHS): string | undefined {
 	if (stats.requests <= 0 && stats.spend <= 0) return undefined;
 	const atoms: string[] = [];
 	if (stats.spend > 0) atoms.push(formatUsd(stats.spend));
 	atoms.push(`${stats.requests} req`);
 	if (stats.elapsedMs > 0) atoms.push(formatDuration(stats.elapsedMs));
-	return `⚡ ${atoms.join(" · ")}`;
+	return `${glyphs.bolt} ${atoms.join(` ${glyphs.sep} `)}`;
 }
 
 export function accountHasData(acc: AccountState): boolean {
@@ -160,8 +220,8 @@ export function accountHasData(acc: AccountState): boolean {
 	);
 }
 
-export function buildAccountTiers(acc: AccountState, lowBalance: boolean): string[] {
-	const gem = lowBalance ? "⚠ ◆" : "◆";
+export function buildAccountTiers(acc: AccountState, lowBalance: boolean, glyphs: GlyphSet = UNICODE_GLYPHS): string[] {
+	const gem = lowBalance ? `${glyphs.warn} ${glyphs.gem}` : glyphs.gem;
 	const bal = acc.availableUsd !== null ? `${gem} ${formatUsd(acc.availableUsd)} avail` : undefined;
 	const plan = acc.planName?.trim() || undefined;
 	const pack = acc.usagePackUsd !== null && acc.usagePackUsd > 0 ? `${formatUsd(acc.usagePackUsd)} pack` : undefined;
@@ -171,7 +231,7 @@ export function buildAccountTiers(acc: AccountState, lowBalance: boolean): strin
 	const head = [plan, bal].filter((p): p is string => !!p).join(" ") || undefined;
 	const numOnly = acc.availableUsd !== null ? formatUsd(acc.availableUsd) : undefined;
 
-	const join = (parts: (string | undefined)[]) => parts.filter((p): p is string => !!p).join(" · ");
+	const join = (parts: (string | undefined)[]) => parts.filter((p): p is string => !!p).join(` ${glyphs.sep} `);
 
 	const tiers: string[] = [
 		join([head, pack, actTok, actReq, rate]),
@@ -233,7 +293,7 @@ export function termVisWidth(str: string): number {
 	return width;
 }
 
-export function truncateAnsi(str: string, maxCols: number): string {
+export function truncateAnsi(str: string, maxCols: number, ellipsis = "…"): string {
 	if (maxCols <= 0) return "";
 	if (termVisWidth(str) <= maxCols) return str;
 	let result = "";
@@ -263,7 +323,7 @@ export function truncateAnsi(str: string, maxCols: number): string {
 		visWidth += charWidth;
 		i += cp > 0xffff ? 2 : 1;
 	}
-	return result + "…";
+	return result + ellipsis;
 }
 
 export interface LineTheme {
@@ -275,35 +335,41 @@ export class StatusLineWidget {
 	private leftRaw: string;
 	private rightTiers: string[];
 	private rightWarn: boolean;
+	private glyphs: GlyphSet;
 
-	constructor(theme: LineTheme, leftRaw: string, rightTiers: string[] = [], rightWarn = false) {
+	constructor(theme: LineTheme, leftRaw: string, rightTiers: string[] = [], rightWarn = false, glyphs: GlyphSet = UNICODE_GLYPHS) {
 		this.theme = theme;
 		this.leftRaw = leftRaw;
 		this.rightTiers = rightTiers;
 		this.rightWarn = rightWarn;
+		this.glyphs = glyphs;
 	}
 
 	invalidate(): void {}
 
 	render(width: number): string[] {
+		// Never paint the terminal's last column: writing the final cell marks a
+		// pending wrap on legacy terminals, and any real-vs-table width
+		// disagreement then scrolls the frame and desyncs pi's row bookkeeping.
+		const w = Math.max(1, width - 1);
 		const leftVis = termVisWidth(this.leftRaw);
-		if (leftVis > width) {
-			return [this.theme.fg("dim", truncateAnsi(this.leftRaw, width))];
+		if (leftVis > w) {
+			return [this.theme.fg("dim", truncateAnsi(this.leftRaw, w, this.glyphs.ellipsis))];
 		}
 
 		const rightColor = this.rightWarn ? "warning" : "dim";
 		const themedLeft = this.theme.fg("dim", this.leftRaw);
-		const budget = width - leftVis - 1;
+		const budget = w - leftVis - 1;
 
 		for (const tier of this.rightTiers) {
 			if (termVisWidth(tier) <= budget) {
 				const themedRight = this.theme.fg(rightColor, tier);
-				const pad = width - termVisWidth(themedLeft) - termVisWidth(themedRight);
+				const pad = w - termVisWidth(themedLeft) - termVisWidth(themedRight);
 				return [themedLeft + " ".repeat(Math.max(1, pad)) + themedRight];
 			}
 		}
 
-		const pad = width - termVisWidth(themedLeft);
+		const pad = w - termVisWidth(themedLeft);
 		return [themedLeft + " ".repeat(Math.max(0, pad))];
 	}
 }

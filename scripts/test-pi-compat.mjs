@@ -13,7 +13,7 @@ globalThis.fetch = async () => new Response('', { status: 503 });
 let session;
 try {
   const { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, VERSION } = await import('@earendil-works/pi-coding-agent');
-  assert.equal(VERSION, '0.99.0', 'test the actual pinned Pi host, not a stale override');
+  assert.equal(VERSION, '1.0.0', 'test the actual pinned Pi host, not a stale override');
   const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
   for (const name of ['@earendil-works/pi-ai', '@earendil-works/pi-agent-core', '@earendil-works/pi-coding-agent', '@earendil-works/pi-tui', 'typebox']) {
     assert.equal(manifest.dependencies?.[name], undefined, `${name}: host packages must not be runtime dependencies`);
@@ -29,6 +29,14 @@ try {
   assert.ok(loaded.extensions.length > 0, 'manifest entrypoints must load');
   const modelRuntime = await ModelRuntime.create({ authPath: join(home, 'auth.json'), modelsPath: null, modelsStorePath: join(home, 'models-cache'), allowModelNetwork: false });
   ({ session } = await createAgentSession({ cwd: home, agentDir: home, resourceLoader, modelRuntime, settingsManager, sessionManager: SessionManager.inMemory(home) }));
+  await modelRuntime.setRuntimeApiKey('zro', 'offline-test-key');
+  const errors = [];
+  await session.bindExtensions({ mode: 'print', onError: (error) => errors.push(error) });
+  await new Promise((done) => setImmediate(done));
+  const models = modelRuntime.getModels('zro');
+  assert.ok(models.length > 0, 'Zro catalog must survive real-host registration');
+  assert.ok(models.every(model => model.api === 'zro'), 'custom stream must retain provider-specific API identity');
+  assert.ok(session.extensionRunner.getRegisteredCommands().some(command => command.name === 'zro-status'));
   const names = new Set();
   for (const extension of loaded.extensions) {
     for (const [name, { definition }] of extension.tools) {
@@ -40,7 +48,43 @@ try {
       assert.ok(session.getAllTools().some(tool => tool.name === name), `${name}: tool must be installed in the real session`);
     }
   }
-  console.log(`${manifest.name}: Pi ${VERSION} warning-free manifest load; ${loaded.extensions.length} extensions, ${names.size} tools registered`);
+  const model = models[0];
+  const offlineFetch = globalThis.fetch;
+  await Promise.all(['first', 'second'].map(async (label) => {
+    const hooks = [];
+    let requestBody;
+    const chunks = [
+      { id: label, choices: [{ index: 0, delta: { role: 'assistant', content: `${label} ✓` }, finish_reason: null }] },
+      { id: label, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5, total_cost: 0.001 } },
+    ];
+    const result = await modelRuntime.streamSimple(model, { messages: [
+      { role: 'system', content: 'Offline Pi 1.0 transcript', timestamp: 0 },
+      { role: 'user', content: label, timestamp: 1 },
+    ] }, {
+      maxTokens: 32,
+      fetch: async (_input, init) => {
+        requestBody = JSON.parse(init.body);
+        return new Response(chunks.map(chunk => `data: ${JSON.stringify(chunk)}\n\n`).join('') + 'data: [DONE]\n\n', {
+          headers: { 'content-type': 'text/event-stream', 'x-ratelimit-limit': '100', 'x-ratelimit-remaining': '99' },
+        });
+      },
+      onPayload: (payload) => { hooks.push('payload'); return { ...payload, user: label }; },
+      onResponse: () => { hooks.push('response'); },
+      onProviderStreamEvent: () => { hooks.push('stream'); },
+    }).result();
+    assert.equal(result.stopReason, 'stop', result.errorMessage);
+    assert.equal(result.content.filter(block => block.type === 'text').map(block => block.text).join(''), `${label} ✓`);
+    assert.equal(result.usage.totalTokens, 5);
+    assert.equal(requestBody.user, label, 'request-scoped instrumentation must not cross concurrent streams');
+    assert.equal(requestBody.max_tokens ?? requestBody.max_completion_tokens, 32);
+    assert.ok(requestBody.messages.some(message => typeof message.content === 'string' && message.content.includes('Offline Pi 1.0 transcript')));
+    assert.deepEqual(hooks.slice(0, 2), ['payload', 'response']);
+    assert.equal(hooks.filter(hook => hook === 'stream').length, 2);
+  }));
+  assert.equal(globalThis.fetch, offlineFetch, 'Zro must never monkey-patch global fetch');
+  await session.extensionRunner.emit({ type: 'session_shutdown' });
+  assert.deepEqual(errors, [], 'Pi 1.0 startup and shutdown must be clean');
+  console.log(`${manifest.name}: Pi ${VERSION} manifest, ${models.length} models, startup/shutdown, concurrent streams and instrumentation OK`);
 } finally {
   session?.dispose();
   globalThis.fetch = previousFetch;

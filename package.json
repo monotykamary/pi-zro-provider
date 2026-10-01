@@ -1,13 +1,13 @@
 {
   "name": "pi-zro-provider",
-  "version": "1.3.22",
+  "version": "1.3.23",
   "description": "Zro provider extension for pi - GLM-5.2, GLM-5.3 Flash, Kimi K3, DeepSeek V4 Flash & DeepSeek V4.1 Flash through the Zro inference endpoint",
   "type": "module",
   "main": "index.ts",
   "scripts": {
     "clean": "echo 'nothing to clean'",
     "build": "echo 'nothing to build'",
-    "check": "tsc --noEmit && node tests/status.smoke.ts",
+    "check": "tsc --noEmit && node tests/status.smoke.ts && node scripts/test-pi-compat.mjs",
     "smoke": "node tests/status.smoke.ts",
     "update-models": "node scripts/update-models.js",
     "test:pi": "node scripts/test-pi-compat.mjs"
@@ -34,8 +34,8 @@
     ]
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "0.99.0",
-    "@earendil-works/pi-coding-agent": "0.99.0",
+    "@earendil-works/pi-ai": "1.0.0",
+    "@earendil-works/pi-coding-agent": "1.0.0",
     "@types/node": "^24.10.1",
     "typescript": "6.0.3"
   },

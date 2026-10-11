@@ -7,7 +7,8 @@
   "scripts": {
     "clean": "echo 'nothing to clean'",
     "build": "echo 'nothing to build'",
-    "check": "tsc --noEmit && node tests/status.smoke.ts && node scripts/test-pi-compat.mjs",
+    "check": "tsc --noEmit && vitest run && node tests/status.smoke.ts && node scripts/test-pi-compat.mjs",
+    "test": "vitest run",
     "smoke": "node tests/status.smoke.ts",
     "update-models": "node scripts/update-models.js",
     "test:pi": "node scripts/test-pi-compat.mjs"
@@ -40,7 +41,8 @@
     "@earendil-works/pi-ai": "1.1.0",
     "@earendil-works/pi-coding-agent": "1.1.0",
     "@types/node": "^24.10.1",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vitest": "4.1.7"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",

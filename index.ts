@@ -13,6 +13,10 @@
  * Model resolution strategy: Stale-While-Revalidate
  *   1. Serve stale immediately: disk cache → embedded models.json (zero-latency)
  *   2. Revalidate in background: live API /api/cli/models → merge with embedded → cache → hot-swap
+ *      Quiet startup sync (sync-policy.ts): only with an API key, only when the
+ *      disk cache is older than the TTL (1h, PI_PROVIDER_SYNC_TTL_MS) or the key
+ *      changed (incl. a new `zro login`), and only one pi process at a time
+ *      (lock file next to the cache).
  *   3. patch.json + custom-models.json applied on top of whichever source won
  *
  * Merge order: [live|cache|embedded] → apply patch.json → merge custom-models.json
@@ -39,7 +43,10 @@
  *   session's first Zro turn completes, so fresh sessions and other
  *   providers' sessions see no half-empty line. Account status is prefetched
  *   on session start or model select when a Zro model is active, so the
- *   first turn ends with data already cached. It is polled again on pi's
+ *   first turn ends with data already cached. That startup prefetch runs
+ *   only in interactive sessions (ctx.hasUI) with a key and account != off,
+ *   and is shared across pi processes: one process fetches (lock next to
+ *   cache/zro-account.json), the others reuse that file for 60s. It is polled again on pi's
  *   agent_settled event (fires only once no automatic retry, compaction, or
  *   queued continuation can follow) — and nowhere else, so sessions without
  *   Zro turns make zero status-related API calls. Between polls the balance
@@ -124,6 +131,7 @@ import {
 import fs from "fs";
 import { homedir } from "os";
 import path from "path";
+import { acquireModelSync, cacheChangedSinceLoad, keyFingerprint, markCacheLoaded, syncMetaPath, writeFileAtomic } from "./sync-policy";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -339,7 +347,8 @@ function loadCachedModels(): JsonModel[] | null {
 function cacheModels(models: JsonModel[]): void {
 	try {
 		fs.mkdirSync(CACHE_DIR, { recursive: true });
-		fs.writeFileSync(CACHE_PATH, JSON.stringify(models, null, 2) + "\n");
+		// Atomic (tmp + rename): other pi processes may be reading the cache right now.
+		writeFileAtomic(CACHE_PATH, JSON.stringify(models, null, 2) + "\n");
 	} catch {
 		// Cache write failure is non-fatal
 	}
@@ -405,6 +414,7 @@ function withDeprecated(models: JsonModel[]): JsonModel[] {
 }
 
 function loadStaleModels(embeddedModels: JsonModel[]): JsonModel[] {
+	markCacheLoaded(CACHE_PATH); // stat before read: lets session_start spot newer caches
 	const cached = loadCachedModels();
 	if (!cached || cached.length === 0) return embeddedModels;
 
@@ -418,13 +428,28 @@ function loadStaleModels(embeddedModels: JsonModel[]): JsonModel[] {
 	return cached;
 }
 
-async function revalidateModels(apiKey: string | undefined, embeddedModels: JsonModel[], signal?: AbortSignal): Promise<JsonModel[] | null> {
-	if (!apiKey) return null;
-	const liveModels = await fetchLiveModels(apiKey, signal);
-	if (!liveModels || liveModels.length === 0) return null;
-	const merged = mergeWithEmbedded(liveModels, embeddedModels);
-	cacheModels(merged);
-	return merged;
+/**
+ * Background revalidation, gated by the quiet startup sync policy
+ * (sync-policy.ts): no key → no fetch; fresh cache (TTL) → no fetch; another
+ * process already fetching → no fetch. When skipped, a cache that another
+ * process refreshed since we loaded it is adopted from disk instead.
+ * `apiKey` is the key actually in use (auth.json → ZRO_API_KEY → zro CLI
+ * credentials), so a new `zro login` changes its fingerprint and forces a
+ * refresh. `force` bypasses the TTL; it is still single-flight.
+ */
+async function revalidateModels(apiKey: string | undefined, embeddedModels: JsonModel[], signal?: AbortSignal, force = false): Promise<JsonModel[] | null> {
+	const lease = acquireModelSync({ cachePath: CACHE_PATH, apiKey, force });
+	if (!lease) return cacheChangedSinceLoad(CACHE_PATH) ? loadStaleModels(embeddedModels) : null;
+	let merged: JsonModel[] | null = null;
+	try {
+		const liveModels = apiKey ? await fetchLiveModels(apiKey, signal) : null;
+		if (!liveModels || liveModels.length === 0) return null;
+		merged = mergeWithEmbedded(liveModels, embeddedModels);
+		cacheModels(merged);
+		return merged;
+	} finally {
+		lease.release(merged ? "fetched" : signal?.aborted ? "aborted" : "failed");
+	}
 }
 
 // ─── API Key Resolution (via ModelRegistry) ────────────────────────────────────
@@ -698,25 +723,110 @@ function refreshAccountStatus(apiKey: string | undefined, signal: AbortSignal | 
 		try {
 			const data = await fetchJsonGet(STATUS_URL, apiKey, signal);
 			if (data === null) return;
-			const billing = data?.billing;
-			if (billing && typeof billing === "object") {
-				if (typeof billing.totalRemaining === "number") account.availableUsd = billing.totalRemaining;
-				if (typeof billing.usagePacks?.remaining === "number") account.usagePackUsd = billing.usagePacks.remaining;
-				const planName = billing.plan?.name;
-				if (typeof planName === "string" && planName.trim()) account.planName = planName.trim();
-			}
-			const activity = data?.activity30d;
-			if (activity && typeof activity === "object") {
-				if (typeof activity.requests === "number") account.activity30dRequests = activity.requests;
-				if (typeof activity.totalTokens === "number") account.activity30dTokens = activity.totalTokens;
-			}
-			if (typeof data?.key?.alias === "string" && data.key.alias.trim()) account.keyAlias = data.key.alias.trim();
+			Object.assign(account, parseAccountSnapshot(data));
 			metaFetched = true;
 		} finally {
 			statusInFlight = null;
 		}
 	})();
 	return statusInFlight;
+}
+
+/** The account fields /api/cli/status reports; only fields present in the response are set. */
+type AccountSnapshot = Partial<Omit<AccountState, "rate">>;
+
+function parseAccountSnapshot(data: any): AccountSnapshot {
+	const snapshot: AccountSnapshot = {};
+	const billing = data?.billing;
+	if (billing && typeof billing === "object") {
+		if (typeof billing.totalRemaining === "number") snapshot.availableUsd = billing.totalRemaining;
+		if (typeof billing.usagePacks?.remaining === "number") snapshot.usagePackUsd = billing.usagePacks.remaining;
+		const planName = billing.plan?.name;
+		if (typeof planName === "string" && planName.trim()) snapshot.planName = planName.trim();
+	}
+	const activity = data?.activity30d;
+	if (activity && typeof activity === "object") {
+		if (typeof activity.requests === "number") snapshot.activity30dRequests = activity.requests;
+		if (typeof activity.totalTokens === "number") snapshot.activity30dTokens = activity.totalTokens;
+	}
+	if (typeof data?.key?.alias === "string" && data.key.alias.trim()) snapshot.keyAlias = data.key.alias.trim();
+	return snapshot;
+}
+
+// ─── Startup Account Prefetch (shared across pi processes) ────────────────────
+// /new, /reload and every other pi process start would each hit
+// /api/cli/status. The startup prefetch instead reuses the quiet-sync lease
+// with its own cache file: one process fetches and writes the parsed snapshot
+// to cache/zro-account.json; others render from that file while it is younger
+// than ACCOUNT_SYNC_TTL_MS. 60s keeps the balance current (spend moves it, and
+// the agent_settled poll reconciles after each run anyway) while collapsing
+// bursts of session starts into one request. A snapshot is only adopted when
+// it was fetched with the same key, and never when older than
+// ACCOUNT_ADOPT_MAX_AGE_MS (e.g. while another process holds the lock) — the
+// first turn's retry fetches instead.
+const ACCOUNT_CACHE_PATH = path.join(CACHE_DIR, `${PROVIDER_ID}-account.json`);
+const ACCOUNT_SYNC_TTL_MS = 60_000;
+const ACCOUNT_ADOPT_MAX_AGE_MS = 10 * 60_000;
+
+function adoptAccountCache(apiKey: string): void {
+	try {
+		const meta = JSON.parse(fs.readFileSync(syncMetaPath(ACCOUNT_CACHE_PATH), "utf8"));
+		if (meta?.keyFingerprint !== keyFingerprint(apiKey)) return;
+		if (Date.now() - fs.statSync(ACCOUNT_CACHE_PATH).mtimeMs > ACCOUNT_ADOPT_MAX_AGE_MS) return;
+		const snapshot = JSON.parse(fs.readFileSync(ACCOUNT_CACHE_PATH, "utf8"));
+		if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return;
+		Object.assign(account, parseCachedSnapshot(snapshot));
+		if (accountHasData(account)) metaFetched = true;
+	} catch {
+		// Missing/corrupt cache: the first turn's retry fetches instead.
+	}
+}
+
+/** Re-validate a snapshot read from disk (written by any extension version/process). */
+function parseCachedSnapshot(raw: Record<string, unknown>): AccountSnapshot {
+	const snapshot: AccountSnapshot = {};
+	for (const field of ["availableUsd", "usagePackUsd", "activity30dRequests", "activity30dTokens"] as const) {
+		if (typeof raw[field] === "number" && Number.isFinite(raw[field])) snapshot[field] = raw[field] as number;
+	}
+	for (const field of ["planName", "keyAlias"] as const) {
+		if (typeof raw[field] === "string" && (raw[field] as string).trim()) snapshot[field] = raw[field] as string;
+	}
+	return snapshot;
+}
+
+/** Session-start prefetch: deduped across processes (see above). Never throws. */
+async function prefetchAccountStatus(apiKey: string | undefined, signal: AbortSignal): Promise<void> {
+	if (!apiKey) return;
+	const lease = acquireModelSync({
+		cachePath: ACCOUNT_CACHE_PATH,
+		apiKey,
+		ttlMs: ACCOUNT_SYNC_TTL_MS,
+		isValidCache: (d) => d != null,
+	});
+	if (!lease) {
+		adoptAccountCache(apiKey);
+		return;
+	}
+	let written = false;
+	try {
+		lastStatusFetchAt = Date.now();
+		const data = await fetchJsonGet(STATUS_URL, apiKey, signal);
+		if (data === null || signal.aborted) return;
+		const snapshot = parseAccountSnapshot(data);
+		Object.assign(account, snapshot);
+		metaFetched = true;
+		try {
+			fs.mkdirSync(CACHE_DIR, { recursive: true });
+			writeFileAtomic(ACCOUNT_CACHE_PATH, JSON.stringify(snapshot) + "\n");
+			written = true;
+		} catch {
+			// Non-fatal: other processes fetch for themselves.
+		}
+	} catch {
+		// Never surface prefetch failures.
+	} finally {
+		lease.release(written ? "fetched" : signal.aborted ? "aborted" : "failed");
+	}
 }
 
 // ─── Status Rendering ─────────────────────────────────────────────────────────
@@ -1097,23 +1207,29 @@ export default function (pi: ExtensionAPI) {
 		// over anything that touched provider registration during load.
 		pi.registerProvider(PROVIDER_ID, makeProviderConfig());
 
-		resolveApiKey(ctx.modelRegistry).then(() => {
-			// A session replacement while the key resolved invalidated the
-			// captured ctx (fast-resume, /new, /fork); nothing below may touch it.
-			if (epoch !== statusEpoch) return;
-			// Prefetch account status only when a Zro model is active
-			// (pi-neuralwatt also prefetches so the first turn ends with data, but
-			// gating here avoids API calls in sessions that never use the provider).
-			if (currentProviderId(ctx) === PROVIDER_ID) {
-				updateStatusAfter(refreshAccountStatus(cachedApiKey, statusSignal, true), ctx);
-			}
-			revalidateModels(cachedApiKey, embeddedModels, signal).then((freshBase) => {
+		// Fire-and-forget: never await network here — startup must not block on
+		// the provider API. Nothing is awaited and every rejection is swallowed.
+		void resolveApiKey(ctx.modelRegistry)
+			.then(() => {
+				// A session replacement while the key resolved invalidated the
+				// captured ctx (fast-resume, /new, /fork); nothing below may touch it.
+				if (epoch !== statusEpoch) return null;
+				// Prefetch account status only in interactive sessions (print mode
+				// and child agents render no footer) when a Zro model is active
+				// (pi-neuralwatt also prefetches so the first turn ends with data, but
+				// gating here avoids API calls in sessions that never use the provider).
+				if (ctx.hasUI && statusConfig.account !== "off" && currentProviderId(ctx) === PROVIDER_ID) {
+					updateStatusAfter(prefetchAccountStatus(cachedApiKey, statusSignal), ctx);
+				}
+				return revalidateModels(cachedApiKey, embeddedModels, signal);
+			})
+			.then((freshBase) => {
 				if (freshBase && epoch === statusEpoch && !signal.aborted) {
 					currentModels = buildModels(freshBase, customModels, patches);
 					pi.registerProvider(PROVIDER_ID, makeProviderConfig());
 				}
-			});
-		});
+			})
+			.catch(() => { /* keep serving the stale catalog */ });
 	});
 
 	pi.on("model_select", (event, ctx) => {

@@ -19,6 +19,7 @@ _GLM-5.2, Kimi K3, and DeepSeek V4 / V4.1 Flash — run through the Zro inferenc
 - **Native reasoning effort** — every model ships an endpoint-verified `piLevel` → level-id map (`glm-5.2`, `glm-5.3-flash`, `deepseek-v4-flash-0731`: full `off`–`max` ladder; `deepseek-v4.1-flash`: `low`/`high`/`max` — catalog has no `none`, and `xhigh`/`max` both send `max`; `kimi-k3`: `low`/`high`/`max` — the proxy rejects `medium` there), so `/thinking low` etc. maps exactly to what the Zro proxy accepts. Quirks: `glm-5.3-flash` silently disables thinking at `low`, so `minimal`/`low` map to `minimal`; `glm-5.3` mirrors flash's full ladder — Z.ai officially removed `none` for the 5.3 family, but the proxy accepts it and streams cleanly (occasionally a short chain-of-thought preamble surfaces in `content` before the answer), and `xhigh`/`max` both send `max`
 - **OpenAI-compatible API** at `https://zro.moonmath.ai/v1`
 - **Official catalog sync** from Zro's `/api/cli/models` endpoint — same one `zro models` uses
+- **Quiet live model sync** — the catalog refreshes in the background, at most hourly and by one pi process at a time ([details](#model-sync))
 - **Zro login reuse** — if you've run `zro login`, the extension picks up `~/.config/zro/credentials.json` automatically (no duplicated keys)
 - **Footer status widget** — session spend/requests and account plan / available spend / usage packs / 30-day activity at a glance
 
@@ -118,7 +119,10 @@ A Neuralwatt-style status line sits below the editor. It appears after the
 session's first Zro turn completes (never before — no half-empty line on
 fresh sessions or other providers), refreshes its balance when the agent run
 fully settles, and makes no status-related API calls in sessions that never
-use Zro:
+use Zro. The account prefetch at session start runs only in interactive
+sessions (not `pi -p` or child agents) and is shared across pi processes: one
+fetches `/api/cli/status` and writes `~/.pi/agent/cache/zro-account.json`, and
+sessions starting within the next 60 seconds render from that file instead:
 
 ```
 ⚡ $0.42 · 7 req                   Pro ◆ $12.34 avail · $2.50 pack · 1.2k req/30d
@@ -191,6 +195,7 @@ Get your API key from [zro.moonmath.ai](https://zro.moonmath.ai).
 | `ZRO_API_KEY` | No | Your Zro API key (env var fallback) |
 | `ZRO_ENDPOINT_ROOT` | No | Override the endpoint root (default `https://zro.moonmath.ai`) |
 | `ZRO_AUTH_URL` | No | Override the authentication/API host (used by `zro login`; the extension resolves catalog/status from it too) |
+| `PI_PROVIDER_SYNC_TTL_MS` | No | Model sync freshness window in ms (default `3600000`; `0` = revalidate every session start) |
 
 ## Configuration
 
@@ -225,6 +230,24 @@ currently empty.
 `patch.json` is applied on top of `models.json` only for verified endpoint
 corrections. It is currently empty because every live field comes from Zro's
 canonical model catalog.
+
+## Model sync
+
+Startup never waits on the network. pi starts with the cached catalog (`~/.pi/agent/cache/zro-models.json`,
+falling back to the bundled `models.json`) and revalidates against `/api/cli/models` in the background — only when:
+
+- a Zro API key is configured (auth.json, `ZRO_API_KEY`, or a `zro login`; no key, no request),
+- the cache is older than 1 hour, missing, or was fetched with a different API key (so a new `zro login`
+  refreshes it right away), and
+- no other pi process is already refreshing it (a `zro-models.lock` file next to the cache).
+
+So `/new`, `/reload`, `pi -p` and fan-out child agents share one cache instead of each calling the API; a
+session that skips the fetch still picks up a cache another process refreshed. A failed refresh is retried after
+5 minutes at the earliest. `PI_PROVIDER_SYNC_TTL_MS` changes the window (`0` revalidates on every session start).
+Only a hash fingerprint of the key is stored (`zro-models.sync.json`), never the key itself.
+
+The footer's startup account prefetch follows the same rules with its own 60-second window
+(`zro-account.json`, see [Footer Status](#footer-status)); balance polls after each agent run are unchanged.
 
 ## Updating Models
 

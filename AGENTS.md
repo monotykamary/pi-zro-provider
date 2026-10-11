@@ -19,6 +19,7 @@ When a model needs overrides, new properties, or corrections, edit the appropria
 | `patch.json` | Per-model overrides keyed by model ID. Add reasoning flags, compat settings, pricing corrections, thinking level maps, etc. Applied on top of `models.json` at runtime and for README generation. |
 | `custom-models.json` | Models that don't exist in the provider API (hidden models, router endpoints, cross-provider aliases). Merged after patch. Format: array of full model objects (same schema as `models.json` entries). |
 | `index.ts` | Provider extension code: model sync, streaming wrapper, footer-status wiring. |
+| `sync-policy.ts` | Quiet startup sync policy (TTL, key fingerprint, cross-process lock). Provider-agnostic and shared verbatim across pi-*-provider repos — keep it free of provider specifics. |
 | `status.ts` | Footer-status presentation: config schema, USD/token formatters, progressive-disclosure tiers, width-aware widget. Pure module — no pi imports; exercised by `tests/status.smoke.ts`. |
 | `scripts/update-models.js` | The sync script itself (edit only if changing how models are fetched/transformed). |
 

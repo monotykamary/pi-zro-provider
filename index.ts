@@ -965,7 +965,7 @@ function commitPending(ctx: ExtensionContext): void {
 	if (pendingSawOutOfCredits) {
 		pendingSawOutOfCredits = false;
 		// Re-fetch now so the balance reflects exhaustion immediately
-		updateStatusAfter(refreshAccountStatus(cachedApiKey, statusAbort?.signal ?? undefined, true), ctx);
+		if (ctx.hasUI) updateStatusAfter(refreshAccountStatus(cachedApiKey, statusAbort?.signal ?? undefined, true), ctx);
 		if (!outOfCreditsNotified && ctx.hasUI) {
 			outOfCreditsNotified = true;
 			ctx.ui.notify("Zro has run out of available spend — top up at zro.moonmath.ai", "error");
@@ -1235,7 +1235,8 @@ export default function (pi: ExtensionAPI) {
 	pi.on("model_select", (event, ctx) => {
 		updateStatus(ctx);
 		const model: any = (event as any).model;
-		if (model?.provider === PROVIDER_ID && cachedApiKey) {
+		// Headless runs (print mode, child agents) render no account status.
+		if (ctx.hasUI && model?.provider === PROVIDER_ID && cachedApiKey) {
 			updateStatusAfter(refreshAccountStatus(cachedApiKey, statusAbort?.signal ?? undefined, false), ctx);
 		}
 	});
@@ -1246,7 +1247,7 @@ export default function (pi: ExtensionAPI) {
 		commitPending(ctx);
 		// If the session_start/model_select status fetch raced or failed, retry
 		// once we have real activity so the very first turn shows the balance.
-		if (sessionStats.requests > 0 && account.availableUsd === null && !metaFetched) {
+		if (ctx.hasUI && sessionStats.requests > 0 && account.availableUsd === null && !metaFetched) {
 			await refreshAccountStatus(cachedApiKey, statusAbort?.signal ?? undefined, false);
 		}
 		updateStatus(ctx);
@@ -1257,7 +1258,7 @@ export default function (pi: ExtensionAPI) {
 	// /api/cli/status is both fresh and not redundant. Gated on session activity
 	// so sessions without Zro turns make zero API calls here.
 	pi.on("agent_settled", async (_event, ctx) => {
-		if (sessionStats.requests > 0 || sessionStats.spend > 0) {
+		if (ctx.hasUI && (sessionStats.requests > 0 || sessionStats.spend > 0)) {
 			await refreshAccountStatus(cachedApiKey, statusAbort?.signal ?? undefined, false);
 			updateStatus(ctx);
 		}

@@ -1,1 +1,33 @@
-{}
+{
+  "kimi-k3": {
+    "id": "kimi-k3",
+    "name": "Kimi K3",
+    "reasoning": true,
+    "thinkingLevelMap": {
+      "off": null,
+      "minimal": null,
+      "low": "low",
+      "medium": null,
+      "high": "high",
+      "xhigh": null,
+      "max": "max"
+    },
+    "input": [
+      "text"
+    ],
+    "cost": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0
+    },
+    "contextWindow": 1048576,
+    "maxTokens": 131072,
+    "compat": {
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": true,
+      "maxTokensField": "max_tokens"
+    },
+    "deprecatedAt": "2026-10-15T04:24:09.470Z"
+  }
+}

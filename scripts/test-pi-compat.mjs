@@ -13,7 +13,7 @@ globalThis.fetch = async () => new Response('', { status: 503 });
 let session;
 try {
   const { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, VERSION } = await import('@earendil-works/pi-coding-agent');
-  assert.equal(VERSION, '1.2.0', 'test the actual pinned Pi host, not a stale override');
+  assert.equal(VERSION, '1.3.0', 'test the actual pinned Pi host, not a stale override');
   const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
   for (const name of ['@earendil-works/pi-ai', '@earendil-works/pi-agent-core', '@earendil-works/pi-coding-agent', '@earendil-works/pi-tui', 'typebox']) {
     assert.equal(manifest.dependencies?.[name], undefined, `${name}: host packages must not be runtime dependencies`);
@@ -58,7 +58,7 @@ try {
       { id: label, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5, total_cost: 0.001 } },
     ];
     const result = await modelRuntime.streamSimple(model, { messages: [
-      { role: 'system', content: 'Offline Pi 1.2.0 transcript', timestamp: 0 },
+      { role: 'system', content: 'Offline Pi 1.3.0 transcript', timestamp: 0 },
       { role: 'user', content: label, timestamp: 1 },
     ] }, {
       maxTokens: 32,
@@ -77,13 +77,13 @@ try {
     assert.equal(result.usage.totalTokens, 5);
     assert.equal(requestBody.user, label, 'request-scoped instrumentation must not cross concurrent streams');
     assert.equal(requestBody.max_tokens ?? requestBody.max_completion_tokens, 32);
-    assert.ok(requestBody.messages.some(message => typeof message.content === 'string' && message.content.includes('Offline Pi 1.2.0 transcript')));
+    assert.ok(requestBody.messages.some(message => typeof message.content === 'string' && message.content.includes('Offline Pi 1.3.0 transcript')));
     assert.deepEqual(hooks.slice(0, 2), ['payload', 'response']);
     assert.equal(hooks.filter(hook => hook === 'stream').length, 2);
   }));
   assert.equal(globalThis.fetch, offlineFetch, 'Zro must never monkey-patch global fetch');
   await session.extensionRunner.emit({ type: 'session_shutdown' });
-  assert.deepEqual(errors, [], 'Pi 1.2.0 startup and shutdown must be clean');
+  assert.deepEqual(errors, [], 'Pi 1.3.0 startup and shutdown must be clean');
   console.log(`${manifest.name}: Pi ${VERSION} manifest, ${models.length} models, startup/shutdown, concurrent streams and instrumentation OK`);
 } finally {
   session?.dispose();

@@ -1,16 +1,15 @@
 {
-  "kimi-k3": {
-    "id": "kimi-k3",
-    "name": "Kimi K3",
+  "minimax-m3.1-flash": {
+    "id": "minimax-m3.1-flash",
+    "name": "MiniMax M3.1 Flash",
     "reasoning": true,
     "thinkingLevelMap": {
       "off": null,
       "minimal": null,
       "low": "low",
-      "medium": null,
+      "medium": "medium",
       "high": "high",
-      "xhigh": null,
-      "max": "max"
+      "xhigh": "max"
     },
     "input": [
       "text"
@@ -22,12 +21,12 @@
       "cacheWrite": 0
     },
     "contextWindow": 1048576,
-    "maxTokens": 131072,
+    "maxTokens": 64000,
     "compat": {
       "supportsDeveloperRole": false,
       "supportsReasoningEffort": true,
       "maxTokensField": "max_tokens"
     },
-    "deprecatedAt": "2026-10-15T04:24:09.470Z"
+    "deprecatedAt": "2026-10-29T05:33:54.241Z"
   }
 }

@@ -1,13 +1,13 @@
 {
-  "minimax-m3.1-flash": {
-    "id": "minimax-m3.1-flash",
-    "name": "MiniMax M3.1 Flash",
+  "dolly1-security": {
+    "id": "dolly1-security",
+    "name": "Dolly 1 Security",
     "reasoning": true,
     "thinkingLevelMap": {
-      "off": null,
+      "off": "none",
       "minimal": null,
-      "low": "low",
-      "medium": "medium",
+      "low": null,
+      "medium": null,
       "high": "high",
       "xhigh": "max"
     },
@@ -27,6 +27,36 @@
       "supportsReasoningEffort": true,
       "maxTokensField": "max_tokens"
     },
-    "deprecatedAt": "2026-10-29T05:33:54.241Z"
+    "deprecatedAt": "2026-11-12T06:58:58.069Z"
+  },
+  "glm-5.3-flash": {
+    "id": "glm-5.3-flash",
+    "name": "GLM-5.3 Flash",
+    "reasoning": true,
+    "thinkingLevelMap": {
+      "off": "none",
+      "minimal": null,
+      "low": null,
+      "medium": null,
+      "high": "high",
+      "xhigh": "max"
+    },
+    "input": [
+      "text"
+    ],
+    "cost": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0
+    },
+    "contextWindow": 1048576,
+    "maxTokens": 64000,
+    "compat": {
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": true,
+      "maxTokensField": "max_tokens"
+    },
+    "deprecatedAt": "2026-11-12T06:58:58.069Z"
   }
 }
